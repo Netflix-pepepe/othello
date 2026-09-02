@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>オンラインオセロ</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; background-color: #f4f4f9; color: #333; margin: 0; padding: 20px; }
+    .card { background: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 20px; max-width: 480px; margin: 0 auto; }
+    
+    #userHeader { display: flex; justify-content: space-between; align-items: center; background: #eef2f5; padding: 10px 15px; border-radius: 8px; margin-bottom: 15px; }
+    #rateDisplay { font-size: 16px; font-weight: bold; color: #2c3e50; }
+    
+    .auth-box { margin-bottom: 15px; background: #f9f9f9; padding: 15px; border-radius: 6px; }
+    
+    /* モーダル（ポップアップ）のスタイル */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.6);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    .modal-content {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      width: 90%;
+      max-width: 500px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    }
+    .terms-scroll-area {
+      overflow-y: auto;
+      text-align: left;
+      font-size: 13px;
+      line-height: 1.6;
+      padding: 10px;
+      border: 1px solid #eee;
+      background-color: #fafafa;
+      border-radius: 6px;
+      margin-top: 10px;
+    }
+    .terms-scroll-area h4 {
+      margin: 14px 0 6px 0;
+      color: #2c3e50;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 3px;
+    }
+
+    .terms-agreement {
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      margin-bottom: 12px;
+      cursor: pointer;
+    }
+
+    #waitingOverlay { display: none; margin: 20px 0; }
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #3498db;
+      border-radius: 50%;
+      width: 40px; height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 15px auto;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    #versusBox { display: flex; justify-content: space-around; font-weight: bold; margin-bottom: 10px; font-size: 16px; background: #fafafa; padding: 10px; border-radius: 6px; }
+
+    #game { display: none; }
+    #info { margin-bottom: 10px; font-size: 18px; font-weight: bold; }
+    #score { margin-bottom: 15px; font-size: 16px; }
+    #board {
+      display: grid;
+      grid-template-columns: repeat(8, 50px);
+      grid-template-rows: repeat(8, 50px);
+      gap: 2px;
+      background-color: #333;
+      width: 414px;
+      margin: 0 auto;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .cell { background-color: #008000; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .stone { width: 40px; height: 40px; border-radius: 50%; }
+    .black { background-color: #000; }
+    .white { background-color: #fff; }
+    
+    button { padding: 8px 14px; font-size: 14px; margin: 4px; cursor: pointer; border: none; border-radius: 6px; background-color: #3498db; color: white; font-weight: bold; }
+    button:hover { background-color: #2980b9; }
+    button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+    input[type="text"], input[type="password"] { padding: 7px; font-size: 14px; width: 110px; text-align: center; border: 1px solid #ccc; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <h2>オンラインオセロ</h2>
+
+  <div class="card">
+    <div id="userHeader">
+      <div><span id="displayUsername">ゲスト</span></div>
+      <div id="rateDisplay">Rating: <span id="userRate">1500</span></div>
+    </div>
+
+    <div id="authSection" class="auth-box">
+      <input type="text" id="authUser" placeholder="ユーザー名">
+      <input type="password" id="authPass" placeholder="パスワード">
+      
+      <div style="margin: 12px 0;">
+        <button type="button" id="openTermsBtn" style="background: none; color: #3498db; text-decoration: underline; padding: 0; margin: 0; font-size: 13px;">
+          📄 利用規約を全画面で確認する
+        </button>
+      </div>
+
+      <label class="terms-agreement">
+        <input type="checkbox" id="termsCheck">
+        <span>利用規約に同意する</span>
+      </label>
+
+      <button id="loginBtn" disabled>ログイン</button>
+      <button id="regBtn" style="background-color: #2ecc71;" disabled>新規登録</button>
+    </div>
+
+    <div id="profileSection" class="auth-box" style="display:none;">
+      <input type="text" id="newNameInput" placeholder="新しい名前">
+      <button id="changeNameBtn">名前を変更</button>
+    </div>
+
+    <div id="lobby">
+      <h3>対戦モードを選択</h3>
+      <div>
+        <button id="rateMatchBtn">レートマッチを探す</button>
+      </div>
+      <hr style="margin: 15px 0; border: none; border-top: 1px solid #eee;">
+      <div>
+        <button id="createRoomBtn">部屋を作成する</button>
+      </div>
+      <div style="margin-top: 10px;">
+        <input type="text" id="roomIdInput" placeholder="5桁の部屋ID" maxlength="5">
+        <button id="joinRoomBtn">部屋に参加</button>
+      </div>
+      <p id="statusMsg" style="color: #e74c3c; margin-top: 15px; font-size: 14px;"></p>
+
+      <hr style="margin: 15px 0; border: none; border-top: 1px solid #eee;">
+      <h4>🏆 レートランキング TOP 10</h4>
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+        <thead>
+          <tr style="background: #eee;">
+            <th style="padding: 6px;">順位</th>
+            <th style="padding: 6px;">ユーザー</th>
+            <th style="padding: 6px;">レート</th>
+          </tr>
+        </thead>
+        <tbody id="rankingBody"></tbody>
+      </table>
+    </div>
+
+    <div id="waitingOverlay">
+      <h3 id="waitingTitle">対戦相手を探しています...</h3>
+      <div class="spinner" id="loadingSpinner"></div>
+      <p id="waitingSubText" style="font-size: 15px; color: #27ae60; font-weight: bold;"></p>
+    </div>
+
+    <div id="game">
+      <div id="versusBox">
+        <div>【黒】 <span id="p1Name"></span> (<span id="p1Rate"></span>)</div>
+        <div>vs</div>
+        <div>【白】 <span id="p2Name"></span> (<span id="p2Rate"></span>)</div>
+      </div>
+      <div id="roleInfo" style="color: #2980b9; font-size: 15px; margin-bottom: 5px; font-weight: bold;"></div>
+      <div id="info">現在のターン: 黒</div>
+      <div id="score">黒: 2 | 白: 2</div>
+      <div id="board"></div>
+
+      <div id="endGameControls" style="display: none; margin-top: 15px;">
+        <button id="rematchBtn" style="background-color: #2ecc71;">再戦を希望する</button>
+        <button id="leaveBtn" style="background-color: #95a5a6;">ロビーに戻る</button>
+        <p id="rematchStatus" style="font-size: 13px; color: #e67e22; margin-top: 5px; font-weight: bold;"></p>
+      </div>
+    </div>
+  </div>
+
+  <div id="termsModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <h3 style="margin-top: 0;">利用規約</h3>
+      <div class="terms-scroll-area">
+        <p>この利用規約（以下、「本規約」といいます。）は、本サービスの利用条件を定めるものです。登録ユーザーの皆様（以下、「ユーザー」といいます。）には、本規約に従って、本サービスをご利用いただきます。</p>
+        
+        <h4>第1条（適用）</h4>
+        <p>本規約は、ユーザーと当サービスとの間の本サービスの利用に関わる一切の関係に適用されるものとします。</p>
+
+        <h4>第2条（利用登録）</h4>
+        <p>登録希望者が当サービスの定める方法によって利用登録を申請し、当サービスがこれを承認することによって、利用登録が完了するものとします。</p>
+
+        <h4>第3条（禁止事項）</h4>
+        <p>ユーザーは、本サービスの利用にあたり、以下の行為をしてはなりません。</p>
+        <ul>
+          <li>法令または公序良俗に違反する行為</li>
+          <li>犯罪行為に関連する行為</li>
+          <li>暴言、誹謗中傷、その他の迷惑行為</li>
+          <li>当サービスのサーバーまたはネットワークの機能を破壊・妨害する行為</li>
+          <li>不正アクセス、またはこれを試みる行為</li>
+          <li>他のユーザーに成りすます行為</li>
+          <li>複数アカウントの不正作成・運用</li>
+        </ul>
+
+        <h4>第4条（本サービスの提供の停止等）</h4>
+        <p>当サービスは、メンテナンスやシステム障害等が発生した場合、ユーザーに事前に通知することなく本サービスの全部または一部の提供を停止または中断することができるものとします。</p>
+
+        <h4>第5条（免責事項）</h4>
+        <p>当サービスは、本サービスに起因してユーザーに生じたあらゆる損害について一切の責任を負いません。</p>
+
+        <h4>第6条（サービス内容の変更等）</h4>
+        <p>当サービスは、ユーザーに通知することなく、本サービスの内容を変更しまたは本サービスの提供を中止することができるものとします。</p>
+      </div>
+      <button id="closeTermsBtn" style="margin-top: 15px; width: 100%;">閉じる</button>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+
+    let currentUser = { username: 'ゲスト', rate: 1500, isGuest: true };
+    let myColor = null;
+    let currentPlayer = 1;
+    let currentRoomId = null;
+    let isGameOver = false;
+
+    const boardData = [
+      [0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],
+      [0,0,0,2,1,0,0,0],[0,0,0,1,2,0,0,0],
+      [0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0]
+    ];
+    const directions = [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];
+
+    // --- 利用規約モーダル処理 ---
+    const termsModal = document.getElementById('termsModal');
+    const openTermsBtn = document.getElementById('openTermsBtn');
+    const closeTermsBtn = document.getElementById('closeTermsBtn');
+    const termsCheck = document.getElementById('termsCheck');
+    const loginBtn = document.getElementById('loginBtn');
+    const regBtn = document.getElementById('regBtn');
+
+    openTermsBtn.addEventListener('click', () => {
+      termsModal.style.display = 'flex';
+    });
+
+    closeTermsBtn.addEventListener('click', () => {
+      termsModal.style.display = 'none';
+    });
+
+    termsCheck.addEventListener('change', () => {
+      const isChecked = termsCheck.checked;
+      loginBtn.disabled = !isChecked;
+      regBtn.disabled = !isChecked;
+    });
+
+    // --- API 認証系処理 ---
+    document.getElementById('regBtn').addEventListener('click', async () => {
+      if (!termsCheck.checked) return alert('利用規約への同意が必要です。');
+      const username = document.getElementById('authUser').value;
+      const password = document.getElementById('authPass').value;
+      const res = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.success) loginSuccess(data.username, data.rate);
+      else alert(data.error);
+    });
+
+    document.getElementById('loginBtn').addEventListener('click', async () => {
+      if (!termsCheck.checked) return alert('利用規約への同意が必要です。');
+      const username = document.getElementById('authUser').value;
+      const password = document.getElementById('authPass').value;
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.success) loginSuccess(data.username, data.rate);
+      else alert(data.error);
+    });
+
+    document.getElementById('changeNameBtn').addEventListener('click', async () => {
+      const newName = document.getElementById('newNameInput').value;
+      const res = await fetch('/api/update-name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newName })
+      });
+      const data = await res.json();
+      if (data.success) {
+        currentUser.username = data.newName;
+        document.getElementById('displayUsername').textContent = data.newName;
+        socket.emit('set_user', currentUser);
+        alert('名前を変更しました');
+        loadRanking();
+      } else alert(data.error);
+    });
+
+    function loginSuccess(name, rate) {
+      currentUser = { username: name, rate: rate, isGuest: false };
+      document.getElementById('displayUsername').textContent = name;
+      document.getElementById('userRate').textContent = rate;
+      document.getElementById('authSection').style.display = 'none';
+      document.getElementById('profileSection').style.display = 'block';
+      socket.emit('set_user', currentUser);
+    }
+
+    // --- ランキング表示 ---
+    async function loadRanking() {
+      const res = await fetch('/api/ranking');
+      const data = await res.json();
+      const tbody = document.getElementById('rankingBody');
+      tbody.innerHTML = '';
+
+      data.forEach((user, index) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td style="padding: 6px; border-bottom: 1px solid #eee;">${index + 1}</td>
+          <td style="padding: 6px; border-bottom: 1px solid #eee;">${user.username}</td>
+          <td style="padding: 6px; border-bottom: 1px solid #eee;">${user.rate}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+    loadRanking();
+
+    // --- ロビー操作 ---
+    document.getElementById('rateMatchBtn').addEventListener('click', () => {
+      socket.emit('join_rate_match');
+      showWaitingScreen('対戦相手を探しています...', '');
+    });
+
+    document.getElementById('createRoomBtn').addEventListener('click', () => {
+      socket.emit('create_room');
+    });
+
+    document.getElementById('joinRoomBtn').addEventListener('click', () => {
+      const roomId = document.getElementById('roomIdInput').value.trim();
+      if (roomId) socket.emit('join_room', roomId);
+    });
+
+    function showWaitingScreen(title, subText) {
+      document.getElementById('lobby').style.display = 'none';
+      document.getElementById('waitingOverlay').style.display = 'block';
+      document.getElementById('waitingTitle').textContent = title;
+      document.getElementById('waitingSubText').textContent = subText;
+    }
+
+    // --- 再戦・退室処理 ---
+    document.getElementById('rematchBtn').addEventListener('click', () => {
+      socket.emit('request_rematch', { roomId: currentRoomId });
+      document.getElementById('rematchStatus').textContent = '再戦を申請しました。相手の返答を待っています...';
+      document.getElementById('rematchBtn').disabled = true;
+    });
+
+    document.getElementById('leaveBtn').addEventListener('click', () => {
+      document.getElementById('game').style.display = 'none';
+      document.getElementById('lobby').style.display = 'block';
+      document.getElementById('endGameControls').style.display = 'none';
+      document.getElementById('rematchBtn').disabled = false;
+      document.getElementById('rematchStatus').textContent = '';
+      loadRanking();
+    });
+
+    // --- Socket イベント受信 ---
+    socket.on('status_message', (msg) => {
+      document.getElementById('statusMsg').textContent = msg;
+    });
+
+    socket.on('room_created', (data) => {
+      currentRoomId = data.roomId;
+      myColor = data.color;
+      showWaitingScreen(`部屋を作成しました (ID: ${data.roomId})`, '対戦相手の参加を待っています...');
+    });
+
+    socket.on('matched', (data) => {
+      document.getElementById('waitingTitle').textContent = "マッチングしました！";
+      document.getElementById('waitingSubText').textContent = data.msg;
+    });
+
+    socket.on('start_game', (data) => {
+      currentRoomId = data.roomId;
+      myColor = data.color;
+
+      resetBoard();
+
+      document.getElementById('waitingOverlay').style.display = 'none';
+      document.getElementById('lobby').style.display = 'none';
+      document.getElementById('game').style.display = 'block';
+      document.getElementById('endGameControls').style.display = 'none';
+      document.getElementById('rematchBtn').disabled = false;
+      document.getElementById('rematchStatus').textContent = '';
+
+      document.getElementById('p1Name').textContent = data.myUser.username;
+      document.getElementById('p1Rate').textContent = data.myUser.rate;
+      document.getElementById('p2Name').textContent = data.enemyUser.username;
+      document.getElementById('p2Rate').textContent = data.enemyUser.rate;
+
+      document.getElementById('roleInfo').textContent = `あなたは 【${myColor === 1 ? '黒' : '白'}】 です`;
+      renderBoard();
+      updateScore();
+    });
+
+    socket.on('enemy_move', (data) => {
+      applyMove(data.row, data.col, data.player);
+    });
+
+    socket.on('rate_updated', (data) => {
+      currentUser.rate = data.newRate;
+      document.getElementById('userRate').textContent = data.newRate;
+    });
+
+    socket.on('rematch_requested', () => {
+      document.getElementById('rematchStatus').textContent = '対戦相手が再戦を希望しています！';
+    });
+
+    // --- ゲームロジック ---
+    function resetBoard() {
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) boardData[r][c] = 0;
+      }
+      boardData[3][3] = 2; boardData[3][4] = 1;
+      boardData[4][3] = 1; boardData[4][4] = 2;
+      currentPlayer = 1;
+      isGameOver = false;
+    }
+
+    function getFlippableStones(r, c, dr, dc, player) {
+      const opponent = player === 1 ? 2 : 1;
+      const stonesToFlip = [];
+      let nr = r + dr, nc = c + dc;
+      while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+        if (boardData[nr][nc] === opponent) stonesToFlip.push([nr, nc]);
+        else if (boardData[nr][nc] === player) return stonesToFlip;
+        else break;
+        nr += dr; nc += dc;
+      }
+      return [];
+    }
+
+    function getAllFlippableStones(r, c, player) {
+      if (boardData[r][c] !== 0) return [];
+      let allStones = [];
+      for (const [dr, dc] of directions) {
+        allStones = allStones.concat(getFlippableStones(r, c, dr, dc, player));
+      }
+      return allStones;
+    }
+
+    function hasValidMove(player) {
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          if (getAllFlippableStones(r, c, player).length > 0) return true;
+        }
+      }
+      return false;
+    }
+
+    function updateScore() {
+      let blackCount = 0, whiteCount = 0;
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          if (boardData[r][c] === 1) blackCount++;
+          if (boardData[r][c] === 2) whiteCount++;
+        }
+      }
+      document.getElementById('score').textContent = `黒: ${blackCount} | 白: ${whiteCount}`;
+      return { blackCount, whiteCount };
+    }
+
+    function renderBoard() {
+      const boardElement = document.getElementById('board');
+      boardElement.innerHTML = '';
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+          cell.addEventListener('click', () => handleCellClick(r, c));
+
+          if (boardData[r][c] !== 0) {
+            const stone = document.createElement('div');
+            stone.className = `stone ${boardData[r][c] === 1 ? 'black' : 'white'}`;
+            cell.appendChild(stone);
+          }
+          boardElement.appendChild(cell);
+        }
+      }
+    }
+
+    function handleCellClick(r, c) {
+      if (isGameOver) return;
+      if (currentPlayer !== myColor) return alert("相手のターンです");
+
+      const flippableStones = getAllFlippableStones(r, c, currentPlayer);
+      if (flippableStones.length === 0) return;
+
+      applyMove(r, c, currentPlayer);
+      socket.emit('make_move', { roomId: currentRoomId, row: r, col: c, player: myColor });
+    }
+
+    function applyMove(r, c, player) {
+      const flippableStones = getAllFlippableStones(r, c, player);
+      boardData[r][c] = player;
+      for (const [fr, fc] of flippableStones) boardData[fr][fc] = player;
+
+      const nextPlayer = player === 1 ? 2 : 1;
+
+      if (hasValidMove(nextPlayer)) {
+        currentPlayer = nextPlayer;
+        document.getElementById('info').textContent = `現在のターン: ${currentPlayer === 1 ? '黒' : '白'}`;
+      } else if (hasValidMove(player)) {
+        alert(`${nextPlayer === 1 ? '黒' : '白'}は置ける場所がないためパスします。`);
+        currentPlayer = player;
+      } else {
+        isGameOver = true;
+        const { blackCount, whiteCount } = updateScore();
+        let winnerColor = 0;
+        let resultText = "ゲーム終了！ ";
+        if (blackCount > whiteCount) { resultText += "黒の勝利！"; winnerColor = 1; }
+        else if (whiteCount > blackCount) { resultText += "白の勝利！"; winnerColor = 2; }
+        else resultText += "引き分け！";
+
+        document.getElementById('info').textContent = resultText;
+        document.getElementById('endGameControls').style.display = 'block';
+        socket.emit('game_over', { roomId: currentRoomId, winnerColor });
+      }
+
+      renderBoard();
+      updateScore();
+    }
+  </script>
+</body>
+</html>
